@@ -1,0 +1,22 @@
+{
+    "C 5-4/15 - 28": {
+        "levo": "C 5-4",
+        "pravo": "15 - 28",
+        "jmeno": "ferda",
+        "pohlavi": "samec 1.0",
+        "otec_id": null,
+        "matka_id": null,
+        "vaha_historie": [],
+        "vystavy": []
+    },
+    "C 5 - 4/18 - 36": {
+        "levo": "C 5 - 4",
+        "pravo": "18 - 36",
+        "jmeno": "pavlis",
+        "pohlavi": "samec 1.0",
+        "otec_id": null,
+        "matka_id": null,
+        "vaha_historie": [],
+        "vystavy": []
+    }
+}
