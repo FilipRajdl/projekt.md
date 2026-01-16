@@ -1,23 +1,31 @@
 class Kralik:
-    def __init__(self, levo, pravo, jmeno, pohlavi, otec_id=None, matka_id=None):
-        self.levo = levo # Tetovací číslo na levém uchu
-        self.pravo = pravo # Tetovací číslo na pravém uchu
+    def __init__(self, levo, pravo, jmeno, pohlavi="1,0", plemeno="", barva="",
+                datum_vrhu="", naroz_ks=0, odchov_ks=0, registr_ks=0,
+                hmotnost=0.0, body=0.0, chovatel="", adresa="",
+                otec_id="", matka_id=""):
+        
+        self.levo = levo
+        self.pravo = pravo
+        self.id = f"{levo}/{pravo}"
         self.jmeno = jmeno
-        self.pohlavi = pohlavi
+        self.pohlavi = pohlavi  # 1,0 nebo 0,1
+        self.plemeno = plemeno
+        self.barva = barva
+        self.datum_vrhu = datum_vrhu
+        self.naroz_ks = naroz_ks
+        self.odchov_ks = odchov_ks
+        self.registr_ks = registr_ks
+        self.hmotnost = hmotnost
+        self.body = body
+        self.chovatel = chovatel
+        self.adresa = adresa
         self.otec_id = otec_id
         self.matka_id = matka_id
-        self.vaha_historie = [] #Datum a vaha
-        self.vystavy = []   #Bodove hondnoceni z vystav
-        self.id = f"{levo}/{pravo}" # Unikatni identifikator kralika
 
     def to_dict(self):
-        return {
-            "levo": self.levo,
-            "pravo": self.pravo,
-            "jmeno": self.jmeno,
-            "pohlavi": self.pohlavi,
-            "otec_id": self.otec_id,
-            "matka_id": self.matka_id,
-            "vaha_historie": self.vaha_historie,
-            "vystavy": self.vystavy,
-        }
+        return self.__dict__
+    
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+            

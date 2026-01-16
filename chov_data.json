@@ -1,22 +1,21 @@
 {
-    "C 5-4/15 - 28": {
-        "levo": "C 5-4",
-        "pravo": "15 - 28",
-        "jmeno": "ferda",
-        "pohlavi": "samec 1.0",
-        "otec_id": null,
-        "matka_id": null,
-        "vaha_historie": [],
-        "vystavy": []
-    },
-    "C 5 - 4/18 - 36": {
+    "C 5 - 4/15 - 27": {
         "levo": "C 5 - 4",
-        "pravo": "18 - 36",
-        "jmeno": "pavlis",
-        "pohlavi": "samec 1.0",
-        "otec_id": null,
-        "matka_id": null,
-        "vaha_historie": [],
-        "vystavy": []
+        "pravo": "15 - 27",
+        "id": "C 5 - 4/15 - 27",
+        "jmeno": "Ota",
+        "pohlavi": "1,0",
+        "plemeno": "Vídeňský šedý",
+        "barva": "šedá",
+        "datum_vrhu": "16. června 2025",
+        "naroz_ks": 0,
+        "odchov_ks": 0,
+        "registr_ks": 0,
+        "hmotnost": "4.70",
+        "body": "96.5b",
+        "chovatel": "Filip František Rajdl",
+        "adresa": "Vlkaneč 83",
+        "otec_id": "",
+        "matka_id": ""
     }
 }
