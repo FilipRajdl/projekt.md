@@ -1,14 +1,13 @@
 class Kralik:
-    def __init__(self, levo, pravo, jmeno, pohlavi="1,0", plemeno="", barva="",
-                datum_vrhu="", naroz_ks=0, odchov_ks=0, registr_ks=0,
-                hmotnost=0.0, body=0.0, chovatel="", adresa="",
-                otec_id="", matka_id=""):
-        
+    def __init__(self, levo, pravo, jmeno, pohlavi="1,0", plemeno="", barva="", 
+                 datum_vrhu="", naroz_ks=0, odchov_ks=0, registr_ks=0,
+                 hmotnost=0.0, body=0.0, chovatel="", adresa="",
+                 otec_id="", matka_id=""):
         self.levo = levo
         self.pravo = pravo
         self.id = f"{levo}/{pravo}"
         self.jmeno = jmeno
-        self.pohlavi = pohlavi  # 1,0 nebo 0,1
+        self.pohlavi = pohlavi  # 1,0 (samec) nebo 0,1 (samice)
         self.plemeno = plemeno
         self.barva = barva
         self.datum_vrhu = datum_vrhu
@@ -24,8 +23,10 @@ class Kralik:
 
     def to_dict(self):
         return self.__dict__
-    
+
     @classmethod
     def from_dict(cls, data):
-        return cls(**data)
-            
+        data_copy = data.copy()
+        if 'id' in data_copy:
+            del data_copy['id']
+        return cls(**data_copy)
