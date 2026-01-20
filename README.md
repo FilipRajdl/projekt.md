@@ -1,11 +1,11 @@
-**Registr chovu králíků**
+# Registr chovu králíků
 
 
 Profesionální desktopová aplikace pro evidenci králíků, správu rodokmenů a automatické generování chovatelských dokumentů ve formátu MS Word.
 
 ---
 
-## 🚀 Hlavní funkce
+## Hlavní funkce
 
 ### 1. Komplexní evidence
 * **Karta králíka:** Detailní správa údajů (tetování L/P, plemeno, barva, hmotnost, ocenění).
@@ -13,8 +13,8 @@ Profesionální desktopová aplikace pro evidenci králíků, správu rodokmenů
 * **Správa vrhů:** Evidence počtu narozených, odchovaných a registrovaných mláďat.
 
 ### 2. Inteligentní rodokmeny
-* **Automatické generace:** Program automaticky dohledává předky až do **3. generace (14 předků)**.
-* **Robustní vyhledávání:** Vyhledávání předků v databázi ignoruje mezery a rozdíly v malých/velkých písmenech v tetování.
+* **Automatické generace:** Program automaticky dohledává předky až do **3. generace**.
+* **Vyhledávání:** Vyhledávání předků v databázi ignoruje mezery a rozdíly v malých/velkých písmenech v tetování.
 * **Vazby:** Každý králík v databázi může figurovat jako potomek i jako předek jiného králíka.
 
 ### 3. Tisk a export (MS Word)
@@ -28,7 +28,7 @@ Aplikace využívá šablonu `rodokmen.docx` pro generování tří typů dokume
 
 ---
 
-## 🛠 Technické informace
+## Technické informace
 
 ### Požadavky
 * **Python 3.11+**
@@ -43,30 +43,15 @@ Aplikace využívá šablonu `rodokmen.docx` pro generování tří typů dokume
 
 ---
 
-## 📖 Nápověda pro zápis
-* **Pohlaví:** Používejte formát `1,0` pro samce a `0,1` pro samici.
+## Nápověda pro zápis
+* **Pohlaví:** Používáme formát `1,0` pro samce a `0,1` pro samici.
 * **Tetování:** Levé ucho (L. u.) značí organizaci a měsíc, pravé ucho (P. u.) značí rok a pořadové číslo zvířete.
 * **Datum:** Doporučený formát pro tisk je textový (např. *16. ledna 2026*).
 
 ---
 
-## 🔒 Zálohování
-Všechna data jsou uložena lokálně v souboru `chov_data.json`. Pro bezpečnost vašich dat doporučujeme tento soubor pravidelně zálohovat na externí disk nebo cloudové úložiště.
+## Zálohování
+Všechna data jsou uložena lokálně v souboru `chov_data.json`. Pro bezpečnost se tento soubor může pravidelně zálohovat na externí disk nebo cloudové úložiště.
 
 
 
-
-
-Krátký popis: Co bude aplikace dělat?
-
-  Aplikace bude sloužit jako osobní evidence králíků v chovu. Umožní ukládat informace o       
-  jednotlivých kusech podle tetovacího čísla, zaznamenávat jejich hmotnost, výstavní body a údaje 
-  o prodeji. Do budoucna lze rozšířit o tvorbu rodokmenů a připouštěcích potvrzení.
-
-
-Klíčové cíle/funkce: Seznam hlavních funkcí, které chcete implementovat
-  - Evidence králíků podle jedinečného tetovacího čísla
-  - Záznam hmotnosti a výstavního hodnocení
-  - Přehled prodaných jedinců
-  - Možnost sledování chovných linií (základ pro rodokmeny)
-  - Příprava do budoucna pro generování potvrzení o připouštění
