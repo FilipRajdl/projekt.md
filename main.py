@@ -290,7 +290,7 @@ class Aplikace:
 
 
     def _ziskej_nahrady_rodokmenu(self, kralik):
-        """Interní funkce, která připraví balík dat pro rodokmen."""
+        """Funkce, která připraví balík dat pro rodokmen."""
         def get_anc(k_id, prefix, level):
             def vycisti(t): return str(t).replace(" ", "").lower() if t else ""
             target = vycisti(k_id)
