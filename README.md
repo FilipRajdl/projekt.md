@@ -1,30 +1,32 @@
 # Registr chovu králíků
 
-
-Profesionální desktopová aplikace pro evidenci králíků, správu rodokmenů a automatické generování chovatelských dokumentů ve formátu MS Word.
+Profesionální desktopová aplikace pro evidenci králíků, správu rodokmenů a automatické generování chovatelských dokumentů s využitím SQL databáze a AI technologií.
 
 ---
 
 ## Hlavní funkce
 
-### 1. Komplexní evidence
-* **Karta králíka:** Detailní správa údajů (tetování L/P, plemeno, barva, hmotnost, ocenění).
-* **Uživatelský komfort:** Rychlé vyplňování políček pomocí klávesy **Enter** a inteligentní nápovědy přímo v editoru.
-* **Správa vrhů:** Evidence počtu narozených, odchovaných a registrovaných mláďat.
+### 1. Profesionální SQL evidence
+* **Robustní úložiště:** Přechod na SQLite databázi zajišťuje integritu dat a bleskové vyhledávání i při velkém množství záznamů.
+* **Karta králíka:** Detailní správa údajů (tetování L/P, jméno, pohlaví, plemeno, barva, hmotnost, chovatel a adresa).
+* **Uživatelský komfort:** Rychlé vyplňování políček pomocí klávesy **Enter** a automatické skenování údajů z fotek.
+* [cite_start]**Správa vrhů:** Evidence počtu narozených, odchovaných a registrovaných mláďat[cite: 3, 4].
 
-### 2. Inteligentní rodokmeny
-* **Automatické generace:** Program automaticky dohledává předky až do **3. generace**.
-* **Vyhledávání:** Vyhledávání předků v databázi ignoruje mezery a rozdíly v malých/velkých písmenech v tetování.
-* **Vazby:** Každý králík v databázi může figurovat jako potomek i jako předek jiného králíka.
+### 2. AI Most & OCR Motor
+* **AI Most:** Možnost importovat kompletní rodokmen (všech 14 předků) jedním kliknutím pomocí JSON kódu z AI chatbota.
+* **Lokální OCR:** Integrované skenování tištěných tabulek na zadní straně rodokmenů pro automatické rozpoznání tetování předků.
+* **Integrovaný Prompt:** Aplikace obsahuje nápovědu s připraveným příkazem pro AI, který stačí zkopírovat.
 
-### 3. Tisk a export (MS Word)
-Aplikace využívá šablonu `rodokmen.docx` pro generování tří typů dokumentů:
-* **Rodokmen:** Kompletně vyplněná přední strana s údaji o zvířeti a jeho předcích.
-* **Připouštěcí potvrzení:** Zadní strana dokumentu s automatickým určením majitele samce/samice a datem krytí.
-* **Kompletní dokument:** Spojení obou funkcí do jednoho souboru na jedno kliknutí.
+### 3. Inteligentní rodokmeny
+* **Vizuální výběr:** Výběr rodičů probíhá interaktivně ze seznamu králíků v databázi (namísto ručního vypisování ID), s automatickým filtrem podle pohlaví.
+* [cite_start]**Automatické generace:** Program automaticky dohledává plemena, data vrhu a chovatele všech předků až do **3. generace** (14 předků)[cite: 1, 2].
+* **Vazby:** Každý králík v databázi je pevně propojen se svými předky pomocí SQL relací.
 
-### 4. Inteligentní párování
-* Při generování potvrzení aplikace nabízí **automatický výběr partnera** opačného pohlaví ze seznamu, čímž eliminuje potřebu ručního vypisování tetování.
+### 4. Tisk a export (MS Word)
+Aplikace využívá chytrou šablonu `rodokmen.docx` pro generování:
+* [cite_start]**Rodokmen:** Kompletně vyplněná tabulka se 14 předky a údaji o zvířeti[cite: 1, 2].
+* [cite_start]**Připouštěcí potvrzení:** Zadní strana dokumentu s automatickým určením majitele samce/samice, datem krytí a statistikami vrhu[cite: 5, 6].
+* **Kompletní dokument:** Spojení obou funkcí do jednoho dokumentu na jedno kliknutí.
 
 ---
 
@@ -32,26 +34,23 @@ Aplikace využívá šablonu `rodokmen.docx` pro generování tří typů dokume
 
 ### Požadavky
 * **Python 3.11+**
-* Knihovny: `python-docx` (pro práci s MS Word)
+* Knihovny: `python-docx` (Word), `pytesseract` (OCR), `opencv-python` (zpracování obrazu), `sqlite3` (databáze).
 
 ### Struktura souborů
 * `main.py`: Hlavní okno aplikace a logika uživatelského rozhraní.
-* `evidence.py`: Správa databáze a ukládání do JSON.
-* `kralik.py`: Definice datové třídy králíka.
-* `chov_data.json`: Databázový soubor se všemi uloženými záznamy.
-* `rodokmen.docx`: Šablona pro generování výstupů (musí obsahovat značky jako `{{jmeno}}`, `{{otec_l}}` atd.).
+* `database.py`: SQL motor aplikace, správa tabulek a hierarchických vazeb.
+* `ocr_processor.py`: Logika pro rozpoznávání textu a tetování z fotografií.
+* `chov_kraliku.db`: Hlavní SQL databázový soubor se všemi uloženými záznamy.
+* [cite_start]`rodokmen.docx`: Šablona pro generování výstupů se značkami (např. `{{levo}}`, `{{otec_pl}}`, `{{v_nar}}` atd.)[cite: 3, 4, 5].
 
 ---
 
 ## Nápověda pro zápis
-* **Pohlaví:** Používáme formát `1,0` pro samce a `0,1` pro samici.
-* **Tetování:** Levé ucho (L. u.) značí organizaci a měsíc, pravé ucho (P. u.) značí rok a pořadové číslo zvířete.
-* **Datum:** Doporučený formát pro tisk je textový (např. *16. ledna 2026*).
+* [cite_start]**Pohlaví:** Používáme formát `1,0` pro samce a `0,1` pro samici[cite: 5, 6].
+* **Tetování:** Levé ucho (L. u.) značí organizaci a měsíc, pravé ucho (P. u.) značí rok a pořadové číslo.
+* **AI Import:** Pro bezchybný přenos dat používejte vestavěný **Super-Prompt** dostupný pod ikonou v aplikaci.
 
 ---
 
 ## Zálohování
-Všechna data jsou uložena lokálně v souboru `chov_data.json`. Pro bezpečnost se tento soubor může pravidelně zálohovat na externí disk nebo cloudové úložiště.
-
-
-
+Všechna data jsou uložena v databázovém souboru `chov_kraliku.db`. Pro maximální bezpečnost doporučujeme tento soubor pravidelně zálohovat na externí disk nebo cloudové úložiště.
