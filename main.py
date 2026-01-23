@@ -1,60 +1,89 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 import os
+import json
 from docx import Document
-from evidence import Registr
-from kralik import Kralik
+from database import Database
+from ocr_processor import OcrProcessor
 
 class Aplikace:
     def __init__(self, root):
-        self.registr = Registr()
+        self.db = Database()
         self.root = root
         self.root.title("Registr chovu králíků")
-        self.root.geometry("900x700")
+        self.root.geometry("1000x750")
 
-        # --- HORNÍ PANEL (Hledání a přidávání) ---
+        # --- HORNÍ PANEL ---
         top_frame = tk.Frame(root, pady=10)
         top_frame.pack(fill="x", padx=10)
 
-        tk.Button(top_frame, text="➕ Přidat nového králíka", command=self.novy_kralik_okno, bg="#4CAF50", fg="white").pack(side="left", padx=5)
+        tk.Button(top_frame, text="Přidat králíka", command=self.novy_kralik_okno, bg="#4CAF50", fg="white").pack(side="left", padx=5)
+        tk.Button(top_frame, text="Import z AI (Text)", command=self.otevri_import_okno, bg="#2196F3", fg="white").pack(side="left", padx=5)
+
+        tk.Button(top_frame, text="Nápověda", command=self.ukaz_napovedu_ai, 
+                  bg="#607D8B", fg="white", width=10).pack(side="left", padx=5)
         
-        tk.Label(top_frame, text="🔍 Hledat:").pack(side="left", padx=(20, 5))
+        tk.Label(top_frame, text="Hledat:").pack(side="left", padx=(20, 5))
         self.search_var = tk.StringVar()
         self.search_var.trace("w", lambda *args: self.aktualizuj_tabulku(self.search_var.get()))
         tk.Entry(top_frame, textvariable=self.search_var, width=30).pack(side="left")
 
         # --- TABULKA ---
-        self.tree = ttk.Treeview(root, columns=("id", "jmeno", "pohlavi", "plemeno"), show="headings")
-        self.tree.heading("id", text="Tetování (L/P)")
-        self.tree.heading("jmeno", text="Jméno")
+        self.tree = ttk.Treeview(root, columns=("id_sql", "tetovani", "pohlavi", "plemeno"), show="headings")
+        self.tree.heading("id_sql", text="ID")
+        self.tree.heading("tetovani", text="Tetování (L/P)")
         self.tree.heading("pohlavi", text="Pohlaví")
         self.tree.heading("plemeno", text="Plemeno")
         
-        self.tree.column("id", width=120)
-        self.tree.column("jmeno", width=150)
-        self.tree.column("pohlavi", width=70)
+        self.tree.column("id_sql", width=0, stretch=False)
+        self.tree.column("tetovani", width=150)
         self.tree.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Akce
         self.tree.bind("<Double-1>", self.otevri_detail)
-        tk.Button(root, text="❌ Smazat vybraného", command=self.smazat_z_tabulky, bg="#f44336", fg="white").pack(pady=5)
+        tk.Button(root, text="Smazat vybraného", command=self.smazat_z_tabulky, bg="#f44336", fg="white").pack(pady=5)
 
         self.aktualizuj_tabulku()
 
     def aktualizuj_tabulku(self, filtr=""):
         for i in self.tree.get_children(): self.tree.delete(i)
+        seznam = self.db.ziskej_vsechny_kraliky()
         filtr = filtr.lower()
-        for k in self.registr.seznam_kraliku.values():
-            if not filtr or filtr in k.jmeno.lower() or filtr in k.id.lower():
-                self.tree.insert("", "end", values=(k.id, k.jmeno, k.pohlavi, k.plemeno))
+        for k in seznam:
+            tetovani = f"{k['levo']} / {k['pravo']}"
+            if not filtr or filtr in k['plemeno'].lower() or filtr in tetovani.lower():
+                self.tree.insert("", "end", values=(k['id'], tetovani, k['pohlavi'], k['plemeno']))
 
     def smazat_z_tabulky(self):
         vyber = self.tree.selection()
         if not vyber: return
-        k_id = self.tree.item(vyber[0])['values'][0]
-        if messagebox.askyesno("Smazat", f"Opravdu smazat králíka {k_id}?"):
-            self.registr.smazat_kralika(k_id)
+        v_data = self.tree.item(vyber[0])['values']
+        if messagebox.askyesno("Smazat", f"Opravdu smazat králíka {v_data[1]}?"):
+            self.db.smaz_kralika(v_data[0])
             self.aktualizuj_tabulku()
+
+    def otevri_import_okno(self):
+        import_okno = tk.Toplevel(self.root)
+        import_okno.title("Vložit data z AI")
+        import_okno.geometry("600x500")
+        tk.Label(import_okno, text="Vložte JSON kód od AI:", font=("Arial", 10, "bold")).pack(pady=10)
+        text_area = tk.Text(import_okno, height=20, width=70)
+        text_area.pack(padx=10, pady=10)
+
+        def potvrdit():
+            obsah = text_area.get("1.0", tk.END).strip()
+            try:
+                data = json.loads(obsah)
+                # Posíláme celý JSON, ne jen data.get('hlavni_kralik')
+                # Tím umožníme uložení předků
+                self.db.uloz_kralika(data.get('hlavni_kralik', data)) 
+                
+                self.aktualizuj_tabulku()
+                import_okno.destroy()
+                messagebox.showinfo("Hotovo", "Králík i jeho předci byli úspěšně nahráni.")
+            except Exception as e:
+                messagebox.showerror("Chyba", f"Neplatný formát dat: {e}")
+
+        tk.Button(import_okno, text="Uložit", command=potvrdit, bg="#4CAF50", fg="white").pack()
 
     def novy_kralik_okno(self):
         self.otevri_editor(None)
@@ -62,389 +91,412 @@ class Aplikace:
     def otevri_detail(self, event):
         vyber = self.tree.selection()
         if not vyber: return
-        k_id = self.tree.item(vyber[0])['values'][0]
-        kralik = self.registr.seznam_kraliku.get(k_id)
-        self.otevri_editor(kralik)
+        k_id_sql = self.tree.item(vyber[0])['values'][0]
+        kralik_data = self.db.ziskej_kralika_podle_id(k_id_sql)
+        self.otevri_editor(kralik_data)
 
     def otevri_editor(self, kralik):
         editor = tk.Toplevel(self.root)
         editor.title("Karta králíka")
-        editor.geometry("650x750")
+        editor.geometry("700x850")
 
         notebook = ttk.Notebook(editor)
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # --- ZÁLOŽKA 1: DATA ---
         tab1 = ttk.Frame(notebook)
         notebook.add(tab1, text="Základní údaje")
 
+        # Seznam všech polí
         fields = [
             ("Levé ucho (L. u.):", "levo"), ("Pravé ucho (P. u.):", "pravo"),
             ("Jméno:", "jmeno"), ("Pohlaví (1,0/0,1):", "pohlavi"),
             ("Plemeno:", "plemeno"), ("Barva:", "barva"),
-            ("Datum vrhu:", "datum_vrhu"), ("Hmotnost (kg):", "hmotnost"),
-            ("Ocenění (body):", "body"), ("Chovatel:", "chovatel"),
-            ("Adresa chovatele:", "adresa"),
-            ("Narozených (ks):", "naroz_ks"),
-            ("Odchovaných (ks):", "odchov_ks"),
+            ("Datum vrhu:", "datum_narozeni"), ("Hmotnost (kg):", "hmotnost"),
+            ("Chovatel:", "chovatel"), ("Adresa chovatele:", "adresa"),
+            ("Narozených (ks):", "naroz_ks"), ("Odchovaných (ks):", "odchov_ks"),
             ("Registrovaných (ks):", "registr_ks")
         ]
         
         entries = {}
-        # Definujeme nápovědy pro jednotlivá pole
-        napovedy = {
-            "pohlavi": "1,0 = samec | 0,1 = samice",
-            #"levo": "Organizace a měsíc (např. C 1-5)",
-            #"pravo": "Rok a pořadové číslo (např. S-10)",
-            "datum_vrhu": "Formát: 16. ledna 2026",
-            "hmotnost": "Zadávejte v kg (např. 4.5)",
-            "body": "Bodové hodnocení z výstavy",
-            "otec_id": "Tetování otce ve formátu L/P",
-            "matka_id": "Tetování matky ve formátu L/P"
-        }
-
         for i, (label_text, attr) in enumerate(fields):
-            # 1. Popisek (Label)
             tk.Label(tab1, text=label_text).grid(row=i, column=0, sticky="e", padx=5, pady=3)
-            
-            # 2. Vstupní pole (Entry)
             ent = tk.Entry(tab1, width=35)
             ent.grid(row=i, column=1, sticky="w", padx=5, pady=3)
             
-            # Nastavení hodnoty, pokud upravujeme existujícího králíka
-            if kralik: 
-                ent.insert(0, getattr(kralik, attr))
+            # Vložení dat, pokud existují
+            if kralik:
+                hodnota = kralik.get(attr)
+                ent.insert(0, str(hodnota) if hodnota is not None else "")
             
-            # 3. Nápověda (vedle políčka)
-            text_napovedy = napovedy.get(attr, "")
-            if text_napovedy:
-                tk.Label(tab1, text=text_napovedy, font=("Arial", 8, "italic"), fg="#7f8c8d").grid(row=i, column=2, sticky="w", padx=10)
-
-            # 4. Magická funkce ENTER (přeskok na další)
-            # Pokud je to poslední pole, skočí na první tlačítko
+            # Funke Enteru pro přeskok
             ent.bind("<Return>", lambda e: e.widget.tk_focusNext().focus())
             entries[attr] = ent
 
-        # --- ZÁLOŽKA 2: RODOKMEN ---
+        tk.Button(tab1, text="Sken (Tesseract)", command=lambda: self.nacti_z_fotky(entries), bg="#9C27B0", fg="white").grid(row=0, column=2, padx=10)
+
+        # --- ZÁLOŽKA 2: PŘEDCI ---
         tab2 = ttk.Frame(notebook)
         notebook.add(tab2, text="Předci")
+
+        # 1. Tlačítko pro skenování 
+        tk.Button(tab2, text="Skenovat zadní stranu (14 předků)", 
+                  command=lambda: self.skenuj_predky_lokalne(kralik, entries),
+                  bg="#FF9800", fg="white", font=("Arial", 9, "bold")).pack(pady=15)
+
+        # Pomocná funkce pro zobrazení tetování místo suchého čísla ID
+        def dej_tetovani(k_id):
+            if not k_id: return "Nezadáno"
+            k = self.db.ziskej_kralika_podle_id(k_id)
+            return f"{k['levo']} / {k['pravo']}" if k else "Nezadáno"
+
+        # Dočasné proměnné pro uložení ID vybraných rodičů
+        self.temp_otec_id = kralik.get('otec_id') if kralik else None
+        self.temp_matka_id = kralik.get('matka_id') if kralik else None
+
+        # --- SEKCE OTEC ---
+        frame_o = tk.LabelFrame(tab2, text="Otec (1,0)", padx=10, pady=10)
+        frame_o.pack(fill="x", padx=15, pady=5)
         
-        tk.Label(tab2, text="ID Otce (L/P):").pack(pady=(20, 2))
-        ent_otec = tk.Entry(tab2, width=30)
-        ent_otec.pack()
-        if kralik: ent_otec.insert(0, kralik.otec_id)
+        lbl_otec_text = tk.Label(frame_o, text=dej_tetovani(self.temp_otec_id), 
+                                 font=("Arial", 10, "bold"), fg="#2196F3")
+        lbl_otec_text.pack(side="left", padx=10)
 
-        tk.Label(tab2, text="ID Matky (L/P):").pack(pady=(10, 2))
-        ent_matka = tk.Entry(tab2, width=30)
-        ent_matka.pack()
-        if kralik: ent_matka.insert(0, kralik.matka_id)
+        def zmenit_otce():
+            v = self.vyber_kralika_dialog("1,0") # Dialog ukáže jen samce
+            if v["id"]:
+                self.temp_otec_id = v["id"]
+                lbl_otec_text.config(text=v["tetovani"])
 
-        # --- TLAČÍTKA EDITORU ---
+        tk.Button(frame_o, text="Vybrat ze seznamu", command=zmenit_otce).pack(side="right")
+
+        # --- SEKCE MATKA ---
+        frame_m = tk.LabelFrame(tab2, text="Matka (0,1)", padx=10, pady=10)
+        frame_m.pack(fill="x", padx=15, pady=5)
+
+        lbl_matka_text = tk.Label(frame_m, text=dej_tetovani(self.temp_matka_id), 
+                                  font=("Arial", 10, "bold"), fg="#E91E63")
+        lbl_matka_text.pack(side="left", padx=10)
+
+        def zmenit_matku():
+            v = self.vyber_kralika_dialog("0,1") # Dialog ukáže jen samice
+            if v["id"]:
+                self.temp_matka_id = v["id"]
+                lbl_matka_text.config(text=v["tetovani"])
+
+        tk.Button(frame_m, text="Vybrat ze seznamu", command=zmenit_matku).pack(side="right")
+
         def ulozit():
+            # 1. Posbíráme textová data z políček (uši, plemeno, chovatel atd.)
             data = {attr: entries[attr].get() for _, attr in fields}
-            data["otec_id"] = ent_otec.get()
-            data["matka_id"] = ent_matka.get()
             
-            novy = Kralik(**data)
-            self.registr.uloz_kralika(novy)
-            self.aktualizuj_tabulku()
-            editor.destroy()
-            messagebox.showinfo("Hotovo", "Králík byl uložen.")
+            # 2. Uložíme králíka do SQL databáze a získáme jeho ID
+            k_id = self.db.uloz_kralika(data)
+            
+            if k_id:
+                # 3. Použijeme ID rodičů, která jsou uložená v temp proměnných
+                self.db.nastav_rodice(k_id, self.temp_otec_id, self.temp_matka_id)
+                
+                # 4. Obnovíme zobrazení a zavřeme okno
+                self.aktualizuj_tabulku()
+                editor.destroy()
+                messagebox.showinfo("Hotovo", "Králík byl úspěšně uložen do databáze.")
+            else:
+                messagebox.showerror("Chyba", "Nepodařilo se uložit data do SQL.")
 
-        tk.Button(editor, text="💾 Uložit data", command=ulozit, bg="#4CAF50", fg="white", width=20, pady=10).pack(pady=5)
-        
+        # --- TLAČÍTKA NA SPODU OKNA ---
+        tk.Button(editor, text="Uložit králíka", command=ulozit, bg="#4CAF50", fg="white", pady=10).pack(pady=5)
+
+        # Tisková sekce (Jen pro existující králíky)
         if kralik:
-            # Rámeček pro tisková tlačítka
             print_frame = tk.LabelFrame(editor, text="Tisk dokumentů", padx=10, pady=10)
             print_frame.pack(fill="x", padx=10, pady=10)
-
-            tk.Button(print_frame, text="📜 Generovat jen RODOKMEN", 
+            
+            tk.Button(print_frame, text="Generovat RODOKMEN", 
                       command=lambda: self.generovat_jen_rodokmen(kralik), 
-                      bg="#2196F3", fg="white", width=35).pack(pady=2)
-
-            tk.Button(print_frame, text="📝 Generovat jen POTVRZENÍ", 
+                      bg="#2196F3", fg="white", width=40).pack(pady=2)
+            
+            tk.Button(print_frame, text="Generovat POTVRZENÍ", 
                       command=lambda: self.generovat_jen_potvrzeni(kralik), 
-                      bg="#FF9800", fg="white", width=35).pack(pady=2)
-
-            tk.Button(print_frame, text="🖨️ Generovat KOMPLETNÍ DOKUMENT", 
+                      bg="#FF9800", fg="white", width=40).pack(pady=2)
+            
+            tk.Button(print_frame, text="KOMPLETNÍ DOKUMENT", 
                       command=lambda: self.generovat_kompletni_dokument(kralik), 
-                      bg="#4CAF50", fg="white", font=("Arial", 9, "bold"), width=35, pady=5).pack(pady=10)
+                      bg="#4CAF50", fg="white", font=("Arial", 9, "bold"), width=40, pady=5).pack(pady=10)       
 
-    # --- OKNO PRO VÝBĚR PARTNERA ---
-    def vyber_partnera(self, pohlavi_hledane):
-        self.vybrany_partner = None
-        
-        okno_vyberu = tk.Toplevel(self.root)
-        okno_vyberu.title(f"Vyberte {'Samce' if pohlavi_hledane == '1,0' else 'Samici'}")
-        okno_vyberu.geometry("450x400")
-        okno_vyberu.grab_set() # Zablokuje ostatní okna, dokud nevyberete
-
-        tk.Label(okno_vyberu, text="Dvojklikem vyberte partnera ze seznamu:", font=("Arial", 10, "bold")).pack(pady=10)
-
-        tree = ttk.Treeview(okno_vyberu, columns=("id", "jmeno"), show="headings")
-        tree.heading("id", text="Tetování")
-        tree.heading("jmeno", text="Jméno")
-        tree.pack(fill="both", expand=True, padx=10, pady=5)
-
-        # Naplníme jen králíky opačného pohlaví
-        for k in self.registr.seznam_kraliku.values():
-            if k.pohlavi == pohlavi_hledane:
-                tree.insert("", "end", values=(k.id, k.jmeno))
-
-        def potvrdit(event=None):
-            vyber = tree.selection()
-            if vyber:
-                k_id = tree.item(vyber[0])['values'][0]
-                self.vybrany_partner = self.registr.seznam_kraliku.get(str(k_id))
-                okno_vyberu.destroy()
-
-        tree.bind("<Double-1>", potvrdit)
-        tk.Button(okno_vyberu, text="✅ Potvrdit výběr", command=potvrdit, bg="#4CAF50", fg="white", pady=5).pack(pady=10)
-        
-        self.root.wait_window(okno_vyberu)
-        return self.vybrany_partner
-
-    # --- UPRAVENÉ FUNKCE PRO TISK ---
-
-    def generovat_jen_potvrzeni(self, kralik):
-        # Místo dialogu otevřeme naše nové okno
-        opacne_pohlavi = "0,1" if kralik.pohlavi == "1,0" else "1,0"
-        partner = self.vyber_partnera(opacne_pohlavi)
-        
-        if not partner: return # Uživatel nic nevybral
-        
-        try:
-            doc = Document(os.path.join(os.path.dirname(os.path.abspath(__file__)), "rodokmen.docx"))
-            nahrady = self._priprav_data_potvrzeni(kralik, partner)
-            self._proved_nahrazeni(doc, nahrady)
-            nazev = f"Potvrzeni_{kralik.id.replace('/', '-')}.docx"
-            doc.save(nazev)
-            os.startfile(nazev)
-        except Exception as e: messagebox.showerror("Chyba", str(e))
-
-    def generovat_kompletni_dokument(self, kralik):
-        # 1. Výběr partnera
-        opacne_pohlavi = "0,1" if kralik.pohlavi == "1,0" else "1,0"
-        partner = self.vyber_partnera(opacne_pohlavi)
-        if not partner: return
-
-        # 2. Dotaz na datum krytí
-        datum_kryti = simpledialog.askstring("Datum krytí", "Zadejte datum krytí:", initialvalue="1. 1. 2026")
-        
-        # 3. Určení samce a samice pro potvrzení
-        samec = kralik if kralik.pohlavi == "1,0" else partner
-        samice = kralik if kralik.pohlavi == "0,1" else partner
-
-        # 4. Kontrola počtu mláďat - pokud je v kartě 0, zeptáme se
-        narozeno = samice.naroz_ks
-        if str(narozeno) == "0":
-            narozeno = simpledialog.askstring("Počet mláďat", "Kolik se narodilo mláďat?", initialvalue="0")
-        
-        odchovano = samice.odchov_ks
-        if str(odchovano) == "0":
-            odchovano = simpledialog.askstring("Počet mláďat", "Kolik se odchovalo mláďat?", initialvalue="0")
-
-        try:
-            doc = Document(os.path.join(os.path.dirname(__file__), "rodokmen.docx"))
-            
-            # Nahrady pro rodokmen
-            nahrady = self._ziskej_nahrady_rodokmenu(kralik)
-            
-            # Nahrady pro připouštěcí potvrzení
-            nahrady.update({
-                "{{m_majitel}}": samec.chovatel,
-                "{{m_adresa}}": samec.adresa,
-                "{{s_majitel}}": samice.chovatel,
-                "{{s_adresa}}": samice.adresa,
-                "{{k_datum}}": datum_kryti if datum_kryti else "....................",
-                "{{v_nar}}": str(narozeno),
-                "{{v_odch}}": str(odchovano),
-                "{{p_plemeno}}": samice.plemeno,
-                "{{p_barva}}": samice.barva
-            })
-
-            self._proved_nahrazeni(doc, nahrady)
-            nazev = f"Kompletni_{kralik.id.replace('/', '-')}.docx"
-            doc.save(nazev)
-            os.startfile(nazev)
-        except Exception as e:
-            messagebox.showerror("Chyba", str(e))
-
-    def _priprav_data_potvrzeni(self, kralik, partner):
-        # Rozlišíme kdo je kdo
-        samec = kralik if kralik.pohlavi == "1,0" else partner
-        samice = kralik if kralik.pohlavi == "0,1" else partner
-        
-        # Tady se plní ty údaje, co ti chyběly
-        return {
-            "{{m_majitel}}": samec.chovatel if samec else "",
-            "{{m_adresa}}": samec.adresa if samec else "",
-            "{{s_majitel}}": samice.chovatel if samice else "",
-            "{{s_adresa}}": samice.adresa if samice else "",
-            "{{p_plemeno}}": samice.plemeno if samice else "",
-            "{{p_barva}}": samice.barva if samice else "",
-            "{{v_nar}}": str(samice.naroz_ks) if samice else "0",
-            "{{v_odch}}": str(samice.odchov_ks) if samice else "0",
-            "{{v_reg}}": str(samice.registr_ks) if samice else "0"
-        }
-
-
+    # --- LOGIKA TISKU ---
     def _ziskej_nahrady_rodokmenu(self, kralik):
-        """Funkce, která připraví balík dat pro rodokmen."""
-        def get_anc(k_id, prefix, level):
-            def vycisti(t): return str(t).replace(" ", "").lower() if t else ""
-            target = vycisti(k_id)
-            k = None
-            if target:
-                for rk in self.registr.seznam_kraliku.values():
-                    if vycisti(rk.id) == target:
-                        k = rk
-                        break
-            data = {}
-            if k:
-                data[f"{{{{{prefix}_l}}}}"] = k.levo
-                data[f"{{{{{prefix}_p}}}}"] = k.pravo
-                data[f"{{{{{prefix}_ch}}}}"] = f"{k.chovatel}, {k.adresa}"
-                if level == 1:
-                    data[f"{{{{{prefix}_pl}}}}"] = k.plemeno
-                    data[f"{{{{{prefix}_dv}}}}"] = k.datum_vrhu
-                data["o"], data["m"] = k.otec_id, k.matka_id
-            else:
-                keys = ["l", "p", "ch"]
-                if level == 1: keys += ["pl", "dv"]
-                for key in keys: data[f"{{{{{prefix}_{key}}}}}"] = ""
-                data["o"], data["m"] = None, None
-            return data
+        """Pomocná funkce pro vyhledání předků v SQL a přípravu značek {{...}}"""
+        def get_anc_data(k_id, prefix, is_parent=False):
+            # Pokud ID chybí nebo králík v DB není, vrátíme prázdné značky
+            if not k_id: 
+                res = {f"{{{{{prefix}_l}}}}": "", f"{{{{{prefix}_p}}}}": "", f"{{{{{prefix}_ch}}}}": ""}
+                if is_parent:
+                    res.update({f"{{{{{prefix}_pl}}}}": "", f"{{{{{prefix}_dv}}}}": ""})
+                return res
 
+            k = self.db.ziskej_kralika_podle_id(k_id)
+            if not k: 
+                res = {f"{{{{{prefix}_l}}}}": "", f"{{{{{prefix}_p}}}}": "", f"{{{{{prefix}_ch}}}}": ""}
+                if is_parent:
+                    res.update({f"{{{{{prefix}_pl}}}}": "", f"{{{{{prefix}_dv}}}}": ""})
+                return res
+            
+            # Základní údaje pro všechny předky
+            res = {
+                f"{{{{{prefix}_l}}}}": k['levo'] or "",
+                f"{{{{{prefix}_p}}}}": k['pravo'] or "",
+                f"{{{{{prefix}_ch}}}}": f"{k['chovatel']}, {k['adresa']}" if k['chovatel'] else ""
+            }
+            
+            # Údaje navíc pouze pro přímé rodiče (otec_pl, otec_dv, atd.)
+            if is_parent:
+                res[f"{{{{{prefix}_pl}}}}"] = k['plemeno'] or ""
+                res[f"{{{{{prefix}_dv}}}}"] = k['datum_narozeni'] or ""
+
+            # ID rodičů pro další generaci
+            res['o'], res['m'] = k['otec_id'], k['matka_id']
+            return res
+
+        # Údaje o hlavním králíkovi
         nahrady = {
-            "{{jmeno}}": kralik.jmeno, "{{levo}}": kralik.levo, "{{pravo}}": kralik.pravo,
-            "{{plemeno}}": kralik.plemeno, "{{datum_vrhu}}": kralik.datum_vrhu,
-            "{{chovatel}}": kralik.chovatel, "{{adresa}}": kralik.adresa,
-            "{{hmotnost}}": str(kralik.hmotnost), "{{body}}": str(kralik.body),
-            "{{v_reg}}": str(kralik.registr_ks) if kralik.registr_ks else "0"
+            "{{jmeno}}": kralik['jmeno'] or "", 
+            "{{levo}}": kralik['levo'] or "", 
+            "{{pravo}}": kralik['pravo'] or "",
+            "{{plemeno}}": kralik['plemeno'] or "", 
+            "{{datum_vrhu}}": kralik['datum_narozeni'] or "",
+            "{{chovatel}}": kralik['chovatel'] or "", 
+            "{{adresa}}": kralik['adresa'] or "",
+            "{{hmotnost}}": str(kralik['hmotnost'] if kralik['hmotnost'] else ""),
+            "{{v_nar}}": str(kralik['naroz_ks'] if kralik['naroz_ks'] is not None else "0"),
+            "{{v_odch}}": str(kralik['odchov_ks'] if kralik['odchov_ks'] is not None else "0"),
+            "{{v_reg}}": str(kralik['registr_ks'] if kralik['registr_ks'] is not None else "0")
         }
-        o = get_anc(kralik.otec_id, "otec", 1); m = get_anc(kralik.matka_id, "matka", 1)
-        oo = get_anc(o["o"], "oo", 2); mo = get_anc(o["m"], "mo", 2)
-        om = get_anc(m["o"], "om", 2); mm = get_anc(m["m"], "mm", 2)
-        ooo = get_anc(oo["o"], "ooo", 3); moo = get_anc(oo["m"], "moo", 3)
-        omo = get_anc(mo["o"], "omo", 3); mmo = get_anc(mo["m"], "mmo", 3)
-        oom = get_anc(om["o"], "oom", 3); mom = get_anc(om["m"], "mom", 3)
-        omm = get_anc(mm["o"], "omm", 3); mmm = get_anc(mm["m"], "mmm", 3)
+
+        # 1. Generace (Rodiče) - Zde nastavujeme is_parent=True
+        o = get_anc_data(kralik['otec_id'], "otec", is_parent=True)
+        m = get_anc_data(kralik['matka_id'], "matka", is_parent=True)
         
-        for d in [o, m, oo, mo, om, mm, ooo, moo, omo, mmo, oom, mom, omm, mmm]:
-            nahrady.update({k: v for k, v in d.items() if str(k).startswith("{")})
+        # 2. Generace (Prarodiče)
+        oo = get_anc_data(o.get('o'), "oo")
+        mo = get_anc_data(o.get('m'), "mo")
+        om = get_anc_data(m.get('o'), "om")
+        mm = get_anc_data(m.get('m'), "mm")
+
+        # 3. Generace (Praprarodiče)
+        ooo = get_anc_data(oo.get('o'), "ooo")
+        moo = get_anc_data(oo.get('m'), "moo")
+        omo = get_anc_data(mo.get('o'), "omo")
+        mmo = get_anc_data(mo.get('m'), "mmo")
+        oom = get_anc_data(om.get('o'), "oom")
+        mom = get_anc_data(om.get('m'), "mom")
+        omm = get_anc_data(mm.get('o'), "omm")
+        mmm = get_anc_data(mm.get('m'), "mmm")
+
+        # Spojíme všechny nasbírané značky do výsledného slovníku
+        vsechny_generace = [o, m, oo, mo, om, mm, ooo, moo, omo, mmo, oom, mom, omm, mmm]
+        for gen in vsechny_generace:
+            for k, v in gen.items():
+                if k.startswith("{{"):
+                    nahrady[k] = v
+
         return nahrady
 
-    # --- 1. TLAČÍTKO: JEN RODOKMEN ---
     def generovat_jen_rodokmen(self, kralik):
         try:
-            doc = Document(os.path.join(os.path.dirname(__file__), "rodokmen.docx"))
+            doc = Document("rodokmen.docx")
             nahrady = self._ziskej_nahrady_rodokmenu(kralik)
             self._proved_nahrazeni(doc, nahrady)
-            nazev = f"Rodokmen_{kralik.id.replace('/', '-')}.docx"
+            nazev = f"Rodokmen_{kralik['levo']}_{kralik['pravo']}.docx".replace("/", "-")
             doc.save(nazev)
             os.startfile(nazev)
-        except Exception as e: messagebox.showerror("Chyba", str(e))
+        except Exception as e: messagebox.showerror("Chyba", f"Rodokmen: {e}")
 
-    # --- 2. TLAČÍTKO: JEN POTVRZENÍ ---
     def generovat_jen_potvrzeni(self, kralik):
-        partner_id = simpledialog.askstring("Párování", "Zadejte tetování partnera:")
-        if not partner_id: return
+        p_id = simpledialog.askstring("Partner", "Zadejte SQL ID partnera (číslo):")
+        if not p_id: return
+        partner = self.db.ziskej_kralika_podle_id(int(p_id))
+        
         try:
-            doc = Document(os.path.join(os.path.dirname(__file__), "rodokmen.docx"))
-            nahrady = self._priprav_data_potvrzeni(kralik, partner_id)
+            doc = Document("rodokmen.docx")
+            nahrady = self._priprav_data_potvrzeni(kralik, partner)
             self._proved_nahrazeni(doc, nahrady)
-            nazev = f"Potvrzeni_{kralik.id.replace('/', '-')}.docx"
+            nazev = f"Potvrzeni_{kralik['levo']}.docx".replace("/", "-")
             doc.save(nazev)
             os.startfile(nazev)
-        except Exception as e: messagebox.showerror("Chyba", str(e))
+        except Exception as e: messagebox.showerror("Chyba", f"Potvrzení: {e}")
 
-    # --- 3. TLAČÍTKO: KOMPLETNÍ DOKUMENT ---
     def generovat_kompletni_dokument(self, kralik):
-        # 1. Výběr partnera
-        opacne_pohlavi = "0,1" if kralik.pohlavi == "1,0" else "1,0"
-        partner = self.vyber_partnera(opacne_pohlavi)
+        p_vstup = simpledialog.askstring("Partner", "Zadejte ID (číslo) nebo tetování partnera (např. C1-2 / 10-20):")
+        if not p_vstup: return
         
+        # Inteligentní vyhledání partnera
+        if p_vstup.isdigit():
+            partner = self.db.ziskej_kralika_podle_id(int(p_vstup))
+        else:
+            partner = self.db.najdi_podle_tetovani(p_vstup)
+
         if not partner:
-            messagebox.showwarning("Pozor", "Pro kompletní dokument s potvrzením je nutné vybrat partnera.")
+            messagebox.showwarning("Chyba", "Partner nebyl v databázi nalezen.")
             return
 
-        # 2. Dotaz na datum krytí (tohle v programu chybělo)
-        datum_kryti = simpledialog.askstring("Datum krytí", "Zadejte datum krytí (např. 1. 5. 2025):")
-        if not datum_kryti: datum_kryti = "...................."
+        datum_kryti = simpledialog.askstring("Krytí", "Datum krytí:", initialvalue="1. 1. 2026")
 
         try:
-            adresar_projektu = os.path.dirname(os.path.abspath(__file__))
-            cesta_k_sablone = os.path.join(adresar_projektu, "rodokmen.docx")
-            doc = Document(cesta_k_sablone)
-
-            # Sběr dat pro rodokmen (předci)
+            doc = Document("rodokmen.docx")
             nahrady = self._ziskej_nahrady_rodokmenu(kralik)
-
-            # Sběr dat pro připouštěcí potvrzení
-            samec = kralik if kralik.pohlavi == "1,0" else partner
-            samice = kralik if kralik.pohlavi == "0,1" else partner
-
-            # Kontrola majitelů - pokud v kartě chybí, použijeme text z dialogu nebo prázdno
-            m_jmeno = samec.chovatel if samec.chovatel else "Doplnit ručně"
-            m_adr = samec.adresa if samec.adresa else ""
-            s_jmeno = samice.chovatel if samice.chovatel else "Doplnit ručně"
-            s_adr = samice.adresa if samice.adresa else ""
-
-            nahrady.update({
-                "{{m_majitel}}": m_jmeno,
-                "{{m_adresa}}": m_adr,
-                "{{s_majitel}}": s_jmeno,
-                "{{s_adresa}}": s_adr,
-                "{{p_plemeno}}": samice.plemeno,
-                "{{p_barva}}": samice.barva,
-                "{{k_datum}}": datum_kryti,
-                "{{v_nar}}": str(samice.naroz_ks) if int(samice.naroz_ks) > 0 else "0",
-                "{{v_odch}}": str(samice.odchov_ks) if int(samice.odchov_ks) > 0 else "0"
-            })
-
-            # Provedení nahrazení
+            potvrzeni = self._priprav_data_potvrzeni(kralik, partner)
+            nahrady.update(potvrzeni)
+            nahrady["{{k_datum}}"] = datum_kryti
+            
             self._proved_nahrazeni(doc, nahrady)
-
-            nazev = f"Kompletni_{kralik.id.replace('/', '-')}.docx"
+            nazev = f"Kompletni_{kralik['levo']}.docx".replace("/", "-").replace(" ", "")
             doc.save(nazev)
             os.startfile(nazev)
-            
-        except Exception as e:
+        except Exception as e: 
             messagebox.showerror("Chyba", f"Generování selhalo: {e}")
 
-    # --- POMOCNÉ METODY PRO VÝŠE UVEDENÉ FUNKCE ---
-    def _priprav_data_potvrzeni(self, kralik, partner_id):
-        p_id_cisty = partner_id.replace(" ", "").lower()
-        partner = None
-        for k in self.registr.seznam_kraliku.values():
-            if k.id.replace(" ", "").lower() == p_id_cisty:
-                partner = k
-                break
+    def _priprav_data_potvrzeni(self, kralik, partner):
         
-        samec = kralik if kralik.pohlavi == "1,0" else partner
-        samice = kralik if kralik.pohlavi == "0,1" else partner
+        s_hlavni = kralik if kralik['pohlavi'] == "1,0" else partner
+        m_hlavni = kralik if kralik['pohlavi'] == "0,1" else partner
         
         return {
-            "{{m_majitel}}": samec.chovatel if samec else "---",
-            "{{m_adresa}}": samec.adresa if samec else "---",
-            "{{s_majitel}}": samice.chovatel if samice else "---",
-            "{{s_adresa}}": samice.adresa if samice else "---",
-            "{{p_plemeno}}": samice.plemeno if samice else "---",
-            "{{p_barva}}": samice.barva if samice else "---",
-            "{{v_nar}}": str(samice.naroz_ks) if samice else "0",
-            "{{v_odch}}": str(samice.odchov_ks) if samice else "0"
+            "{{m_majitel}}": s_hlavni['chovatel'] if s_hlavni else "",
+            "{{m_adresa}}": s_hlavni['adresa'] if s_hlavni else "",
+            "{{s_majitel}}": m_hlavni['chovatel'] if m_hlavni else "",
+            "{{s_adresa}}": m_hlavni['adresa'] if m_hlavni else "",
+            "{{p_plemeno}}": m_hlavni['plemeno'] if m_hlavni else "",
+            "{{p_barva}}": m_hlavni['barva'] if m_hlavni else "",
+            "{{v_nar}}": str(m_hlavni['naroz_ks'] if m_hlavni and m_hlavni['naroz_ks'] is not None else "0"),
+            "{{v_odch}}": str(m_hlavni['odchov_ks'] if m_hlavni and m_hlavni['odchov_ks'] is not None else "0"),
+            "{{v_reg}}": str(m_hlavni['registr_ks'] if m_hlavni and m_hlavni['registr_ks'] is not None else "0")
         }
 
     def _proved_nahrazeni(self, doc, nahrady):
         for p in doc.paragraphs:
             for k, v in nahrady.items():
-                if k in p.text: p.text = p.text.replace(k, str(v))
+                if k in p.text: p.text = p.text.replace(k, str(v) if v else "")
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for k, v in nahrady.items():
-                        if k in cell.text: cell.text = cell.text.replace(k, str(v))
+                        if k in cell.text: cell.text = cell.text.replace(k, str(v) if v else "")
+
+    def nacti_z_fotky(self, entries):
+        cesta = filedialog.askopenfilename(filetypes=[("Obrázky", "*.png *.jpg *.jpeg")])
+        if not cesta: return
+        try:
+            if not hasattr(self, 'ocr'): self.ocr = OcrProcessor()
+            data = self.ocr.nacti_data_z_obrazku(cesta)
+            for k, v in data.items():
+                if k in entries:
+                    entries[k].delete(0, tk.END)
+                    entries[k].insert(0, v)
+        except Exception as e: messagebox.showerror("OCR", str(e))
+
+    def skenuj_predky_lokalne(self, kralik, entries):
+        cesta = filedialog.askopenfilename(filetypes=[("Obrázky", "*.png *.jpg *.jpeg")])
+        if not cesta: return
+        
+        try:
+            if not hasattr(self, 'ocr'): self.ocr = OcrProcessor()
+            tattoos = self.ocr.nacti_zadni_stranu(cesta)
+            
+            if len(tattoos) >= 2:
+                # Otec a Matka jsou první dvě nalezená tetování
+                messagebox.showinfo("Sken předků", 
+                    f"Nalezena tetování:\nOtec: {tattoos[0]}\nMatka: {tattoos[1]}\n\n"
+                    "Byl vytvořen základ pro rodokmen.")
+                
+            else:
+                messagebox.showwarning("Sken", "Nepodařilo se najít dostatek tetování.")
+        except Exception as e:
+            messagebox.showerror("Chyba skenu", str(e))
+
+    def skenuj_zadni_stranu_akce(self, kralik_id):
+        cesta = filedialog.askopenfilename(title="Vyberte zadní stranu rodokmenu")
+        if not cesta: return
+        
+        if not hasattr(self, 'ocr'): self.ocr = OcrProcessor()
+        seznam = self.ocr.nacti_zadni_stranu(cesta)
+        
+        if len(seznam) >= 4:
+            if self.db.uloz_14_predku(kralik_id, seznam):
+                messagebox.showinfo("Úspěch", f"Načteno {len(seznam)} tetování a propojen Otec a Matka.")
+                self.aktualizuj_tabulku()
+        else:
+            messagebox.showwarning("Sken", f"Nalezeno pouze {len(seznam)} tetování. Zkuste lepší fotku.")
+
+    def vyber_kralika_dialog(self, pohlavi_hledane=None):
+        """Otevře okno se seznamem králíků a vrátí ID vybraného jedince."""
+        vysledek = {"id": None, "tetovani": "Nezadáno"}
+        
+        okno = tk.Toplevel(self.root)
+        okno.title("Vyberte králíka")
+        okno.geometry("500x400")
+        okno.grab_set()
+
+        tree = ttk.Treeview(okno, columns=("id", "tetovani", "plemeno"), show="headings")
+        tree.heading("id", text="ID"); tree.heading("tetovani", text="Tetování"); tree.heading("plemeno", text="Plemeno")
+        tree.column("id", width=50); tree.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Načtení králíků z SQL
+        vsechny = self.db.ziskej_vsechny_kraliky()
+        for k in vsechny:
+            if pohlavi_hledane and k['pohlavi'] != pohlavi_hledane:
+                continue
+            tree.insert("", "end", values=(k['id'], f"{k['levo']} / {k['pravo']}", k['plemeno']))
+
+        def potvrdit(event=None):
+            vyber = tree.selection()
+            if vyber:
+                v_data = tree.item(vyber[0])['values']
+                vysledek["id"] = v_data[0]
+                vysledek["tetovani"] = v_data[1]
+                okno.destroy()
+
+        tree.bind("<Double-1>", potvrdit)
+        tk.Button(okno, text="Vybrat", command=potvrdit, bg="#4CAF50", fg="white").pack(pady=10)
+        
+        self.root.wait_window(okno)
+        return vysledek
+    
+    def ukaz_napovedu_ai(self):
+        """Otevře okno s promptem pro AI a umožní jeho zkopírování."""
+        napoveda_okno = tk.Toplevel(self.root)
+        napoveda_okno.title("Nápověda k AI importu")
+        napoveda_okno.geometry("500x400")
+        
+        instrukce = (
+            "Pro nejlepší výsledek pošli AI chatbotovi fotku rodokmenu\n"
+            "a k ní přilož tento příkaz (prompt):\n"
+        )
+        tk.Label(napoveda_okno, text=instrukce, font=("Arial", 10)).pack(pady=10)
+
+        # Textové pole s promptem
+        prompt_text = (
+            "Analyzuj tento rodokmen. Vytvoř JSON pro můj program. "
+            "Musíš u všech králíků (hlavní i 14 předků) uvést: "
+            "'levo', 'pravo', 'pohlavi' (1,0 nebo 0,1), 'chovatel' a 'adresa'. "
+            "U hlavního králíka a jeho rodičů přidej i 'plemeno' a 'datum_narozeni'. "
+            "Pokud údaj vidíš, musí být v JSONu. Odpověz pouze čistým JSON kódem."
+        )
+        
+        text_box = tk.Text(napoveda_okno, height=8, padx=10, pady=10, wrap="word")
+        text_box.insert("1.0", prompt_text)
+        text_box.config(state="disabled") 
+        text_box.pack(padx=20, pady=5)
+
+        def kopirovat():
+            self.root.clipboard_clear()
+            self.root.clipboard_append(prompt_text)
+            messagebox.showinfo("Zkopírováno", "Prompt byl zkopírován do schránky.")
+
+        tk.Button(napoveda_okno, text="Zkopírovat prompt", command=kopirovat, 
+                  bg="#2196F3", fg="white", pady=5).pack(pady=10)
+        
+        tk.Label(napoveda_okno, text="Poté vygenerovaný kód vlož přes tlačítko 'Import z AI'.", 
+                 font=("Arial", 8, "italic")).pack(pady=5)
 
 if __name__ == "__main__":
     root = tk.Tk()
